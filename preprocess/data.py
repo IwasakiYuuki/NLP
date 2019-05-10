@@ -4,7 +4,7 @@ import glob
 import re
 import pickle
 import MeCab
-m = MeCab.Tagger('-Owakati')
+m = MeCab.Tagger('-Ochasen')
 
 def make_data(fname, data2):
     f = open(fname, 'r', encoding='utf-8')
@@ -87,11 +87,11 @@ def make_data(fname, data2):
             while len(t) > 100:
                 if t.find("。") != -1:
                     n_period = t.find("。")
-                    data2.append("SSSS" + t[0:n_period + 1])
+                    data2.append("SSSS" + t)
                     t = t[n_period + 1:]
                 else:
                     break
-        data2.append("SSSS" + m.parse(t))
+        data2.append("SSSS" + t)
         text = text[end_s + 4:]
     f.close()
     return
@@ -99,11 +99,12 @@ def make_data(fname, data2):
 
 def genarate_npy(source_csv,genarated_npy) :
 
-    df2 = csv.reader(open(source_csv, 'r', encoding='utf-8'),delimiter=' ')
+    df2 = csv.reader(open(source_csv, 'r', encoding='utf-8'),delimiter='\t')
 
     data2 = [ v for v in df2]
 
     mat=np.array(data2)
+    print(mat)
     print(mat.shape)
     mat_corpus=[]
 
@@ -125,7 +126,7 @@ def genarate_npy(source_csv,genarated_npy) :
                 mat_corpus.append(mat[i][0])
 
     #デリミタ連続対策
-
+    print(np.array(mat_corpus))
     mat_corpus1=[]
 
     for i in range(1,len(mat_corpus)) :
@@ -138,25 +139,41 @@ def genarate_npy(source_csv,genarated_npy) :
     mat_corpus1=np.array(mat_corpus1).reshape(len(mat_corpus1),1)
     #コーパス行列セーブ
     np.save(genarated_npy, mat_corpus1)
-    print(mat_corpus1)
-    print(mat_corpus1.shape)
+    print('in gene :', mat_corpus1.shape)
 
     return
 
+
+file_list = glob.glob('data/nagoya_corpus/*')
+print(len(file_list))
+
+data2=[]
+for j in range(0,len(file_list)) :
+    print(file_list[j])
+    make_data(file_list[j],data2)
+
+#ファイルセーブ
+f = open("data/nagoya_corpus/corpus.txt", 'w', encoding='utf-8')
+for i in range(0,len(data2)):
+    f.write(str(m.parse(data2[i])))
+f.close()
+print(len(data2))
 
 genarate_npy('data/nagoya_corpus/corpus.txt', 'data/nagoya_corpus/corpus.npy')
 
 
 #１次元配列ロード
 mat_corpus = np.load('data/nagoya_corpus/corpus.npy')
+print(mat_corpus.shape)
 data1 = [v[0] for v in mat_corpus]
 
 mat1 = np.array(data1).reshape((len(data1),1))
-print(mat1)
 mat0 = ['SSSS']                                               #先頭のデリミタ
 mat0 = np.array(mat0).reshape((1,1))
 
 mat = np.r_[mat0[:,0],mat1[:,0]]                            #各配列の先頭にデリミタがないので、
+
+print('mat :', mat.shape)
                                                              #マージ後に改めて付与する
 words = sorted(list(set(mat)))
 cnt = np.zeros(len(words))
@@ -291,8 +308,6 @@ d = np.array(d).reshape(len(d_input), maxlen_d, 1)
 t = np.array(t).reshape(len(t_l), maxlen_d, 1)
 
 print(e.shape,d.shape,t.shape)
-for i in d:
-    print(i[0:5])
 
 #Encoder Inputデータをセーブ
 with open('data/nagoya_corpus/e.pickle', 'wb') as f :
