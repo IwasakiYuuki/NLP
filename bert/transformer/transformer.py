@@ -76,7 +76,7 @@ class Transformer(tf.keras.models.Model):
                 self.acc = tf.identity(tf.reduce_sum(accuracies) / tf.reduce_sum(weights), name='acc')
 
 
-    def call(self, inputs: tf.Tensor, training: bool, decoder_input: tf.Tensor=None) -> tf.Tensor:
+    def call(self, inputs: tf.Tensor, decoder_input: tf.Tensor, training: bool=False) -> tf.Tensor:
         enc_attention_mask = self._create_enc_attention_mask(inputs)
         dec_self_attention_mask = self._create_dec_self_attention_mask(decoder_input)
 

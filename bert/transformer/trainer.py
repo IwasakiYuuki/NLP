@@ -2,6 +2,7 @@ import sys, os
 sys.path.append(os.path.join(os.path.dirname(__file__), '../..'))
 print(sys.path)
 import tensorflow as tf
+import numpy as np
 from bert.transformer.transformer import Transformer
 from bert.transformer.preprocess.batch_generator import BatchGenerator
 import sentencepiece as spm
@@ -80,4 +81,4 @@ with graph.as_default():
 #            saver.save(sess, ckpt_path, global_step=step)
     saver.restore(sess, tf.train.latest_checkpoint('./checkpoint'))
 
-    transformer.predict()
+    print(transformer.predict(np.array([[6, 49, 9, 172, 853, 500]])))
