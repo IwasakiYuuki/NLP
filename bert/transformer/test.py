@@ -4,65 +4,63 @@ import keras
 import keras_transformer
 import keras_bert
 from keras_bert.backend import backend as K
+from keras_embed_sim import EmbeddingRet, EmbeddingSim
 
-TOKEN_PAD = ''  # Token for padding
-TOKEN_UNK = '[UNK]'  # Token for unknown words
-TOKEN_CLS = '[CLS]'  # Token for classification
-TOKEN_SEP = '[SEP]'  # Token for separation
-TOKEN_MASK = '[MASK]'  # Token for masking
+config_file_path = ''
+checkpoint_file_path = ''
 
-def get_inputs(seq_len):
-    """Get input layers.
-    See: https://arxiv.org/pdf/1810.04805.pdf
-    :param seq_len: Length of the sequence or None.
-    """
-    names = ['Token', 'Segment', 'Masked']
-    return [keras.layers.Input(
-        shape=(seq_len,),
-        name='Input-%s' % name,
-    ) for name in names]
-
-def gelu(x):
-    if K.backend() == 'tensorflow':
-        import tensorflow as tf
-        return 0.5 * x * (1.0 + tf.erf(x / tf.sqrt(2.0)))
-    return 0.5 * x * (1.0 + K.tanh(math.sqrt(2.0 / math.pi) * (x + 0.044715 * K.pow(x, 3))))
 
 def get_model(
         token_num,
-        pos_num=512,
-        seq_len=512,
-        embed_dim=768,
-        transformer_num=12,
-        head_num=12,
-        feed_forward_dim=3072,
-        dropout_rate=0.1,
-        weight_decay=0.01,
+        embed_dim,
+        encoder_num,
+        decoder_num,
+        head_num,
+        hidden_dim,
         attention_activation=None,
-        feed_forward_activation=gelu,
-        custom_layers=None,
-        output_layer_num=1,
-        decay_steps=100000,
-        warmup_steps=10000,
-        lr=1e-4
+        feed_forward_activation='relu',
+        dropout_rate=0.0,
+        use_same_embed=True,
+        embed_weights=None,
+        embed_trainable=None,
+        trainable=True
 ):
-    inputs, bert_output_layer = keras_bert.get_model(
-        token_num=token_num,
-        pos_num=pos_num,
-        seq_len=seq_len,
-        embed_dim=embed_dim,
-        transformer_num=transformer_num,
+    encoder_model = keras_bert.load_trained_model_from_checkpoint(
+        config_file=config_file_path,
+        checkpoint_file=checkpoint_file_path,
+    )
+
+    decoder_model = keras_bert.load_trained_model_from_checkpoint(
+        config_file=config_file_path,
+        checkpoint_file=checkpoint_file_path,
+    )
+
+    encoder_inputs, encoder_embed = encoder_model.inputs, encoder_model.output
+    decoder_inputs, decoder_embed = decoder_model.inputs, decoder_model.output
+    encoded_layer = keras_transformer.get_encoders(
+        encoder_num=encoder_num,
+        input_layer=encoder_embed,
         head_num=head_num,
-        feed_forward_dim=feed_forward_dim,
-        dropout_rate=dropout_rate,
-        weight_decay=weight_decay,
+        hidden_dim=hidden_dim,
         attention_activation=attention_activation,
         feed_forward_activation=feed_forward_activation,
-        custom_layers=custom_layers,
-        training=False,
-        trainable=False,
-        output_layer_num=output_layer_num,
-        decay_steps=decay_steps,
-        warmup_steps=warmup_steps,
-        lr=lr
+        dropout_rate=dropout_rate,
+        trainable=trainable,
     )
+    decoded_layer = keras_transformer.get_decoders(
+        decoder_num=decoder_num,
+        input_layer=decoder_embed,
+        encoded_layer=encoded_layer,
+        head_num=head_num,
+        hidden_dim=hidden_dim,
+        attention_activation=attention_activation,
+        feed_forward_activation=feed_forward_activation,
+        dropout_rate=dropout_rate,
+        trainable=trainable,
+    )
+    dense_layer = keras.layers.Dense(
+        token_num,
+        name='Output',
+    )(decoded_layer)
+
+    return keras.models.Model(inputs=[encoder_inputs, decoder_inputs], outputs=dense_layer)
