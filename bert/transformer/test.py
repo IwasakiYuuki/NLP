@@ -30,7 +30,7 @@ def gelu(x):
 
 def get_model(
         token_num,
-        pos_len=512,
+        pos_num=512,
         seq_len=512,
         embed_dim=768,
         transformer_num=12,
@@ -48,7 +48,7 @@ def get_model(
 ):
     inputs, bert_output_layer = keras_bert.get_model(
         token_num=token_num,
-        pos_len=pos_len,
+        pos_num=pos_num,
         seq_len=seq_len,
         embed_dim=embed_dim,
         transformer_num=transformer_num,
@@ -59,6 +59,8 @@ def get_model(
         attention_activation=attention_activation,
         feed_forward_activation=feed_forward_activation,
         custom_layers=custom_layers,
+        training=False,
+        trainable=False,
         output_layer_num=output_layer_num,
         decay_steps=decay_steps,
         warmup_steps=warmup_steps,
