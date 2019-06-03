@@ -15,6 +15,13 @@ with open('data/nagoya_corpus/nagoya_decoder_inputs_L20.pickle', 'rb') as f:
     decoder_inputs = pickle.load(f)
 with open('data/nagoya_corpus/nagoya_decoder_outputs_L20.pickle', 'rb') as f:
     decoder_outputs = pickle.load(f)
+with open('data/nagoya_corpus/token2text.pickle', 'rb') as f:
+    token2text = pickle.load(f)
+
+
+encoder_inputs = encoder_inputs[:32]
+decoder_inputs = decoder_inputs[:32]
+decoder_outputs = decoder_outputs[:32]
 
 
 def get_transformer_on_bert_model(
@@ -129,12 +136,12 @@ def train(
     history = transformer_model.fit_generator(
         generator=_generator(),
         steps_per_epoch=100,
-        epochs=1000,
+        epochs=200,
         validation_data=_generator(),
         validation_steps=20,
         callbacks=[
             keras.callbacks.ModelCheckpoint('./data/checkpoint/transformer_model.ckpt', monitor='val_loss'),
-            keras.callbacks.TensorBoard(log_dir='./data/log-adam-4000/'),
+            keras.callbacks.TensorBoard(log_dir='./data/log-adam-4000-D32/'),
             keras.callbacks.LearningRateScheduler(_decay),
 #            keras.callbacks.EarlyStopping(monitor='val_loss', patience=0, verbose=1, mode='auto'),
             PredictionCallback(encoder_inputs[0], 20),
@@ -151,7 +158,7 @@ def prediction(
 #    predicted = np.asarray([2]+[0]*(max_len-1))
 #    for i in range(max_len-1):
 #        predicted[i+1] = model.predict(x=[inputs, predicted]).argmax(axis=2).flatten()[i+1]
-    predicted = keras_transformer.decode(
+    predicted = decode(
         model,
         inputs.tolist(),
         start_token=2,
@@ -160,10 +167,14 @@ def prediction(
         max_len=max_len,
     )
     print('=================predict result=================')
-    print('input:', inputs.__str__())
-    print('------------------------------------------------')
-    print('output:', predicted.__str__())
-    print('================================================')
+    print('input:')
+    for i in inputs:
+        print(token2text[i], end='')
+    print('\n------------------------------------------------')
+    print('output:')
+    for i in predicted:
+        print(token2text[i], end='')
+    print('\n================================================')
 
 
 def beam_search(
@@ -188,10 +199,58 @@ def beam_search(
     return result
 
 
+def decode(model, tokens, start_token, end_token, pad_token, max_len=10000, max_repeat=10, max_repeat_block=10):
+    """Decode with the given model and input tokens.
+    :param model: The trained model.
+    :param tokens: The input tokens of encoder.
+    :param start_token: The token that represents the start of a sentence.
+    :param end_token: The token that represents the end of a sentence.
+    :param pad_token: The token that represents padding.
+    :param max_len: Maximum length of decoded list.
+    :param max_repeat: Maximum number of repeating blocks.
+    :param max_repeat_block: Maximum length of the repeating block.
+    :return: Decoded tokens.
+    """
+    is_single = not isinstance(tokens[0], list)
+    if is_single:
+        tokens = [tokens]
+    batch_size = len(tokens)
+    decoder_inputs = [[start_token] for _ in range(batch_size)]
+    outputs = [None for _ in range(batch_size)]
+    output_len = 1
+    while len(list(filter(lambda x: x is None, outputs))) > 0:
+        output_len += 1
+        batch_inputs, batch_outputs = [], []
+        max_input_len = 0
+        index_map = {}
+        for i in range(batch_size):
+            if outputs[i] is None:
+                index_map[len(batch_inputs)] = i
+                batch_inputs.append(tokens[i][:])
+                batch_outputs.append(decoder_inputs[i])
+                max_input_len = max(max_input_len, len(tokens[i]))
+        for i in range(len(batch_inputs)):
+            batch_inputs[i] += [pad_token] * (max_input_len - len(batch_inputs[i]))
+        predicts = model.predict([np.asarray(batch_inputs), np.asarray(batch_outputs)])
+        for i in range(len(predicts)):
+            last_token = np.argsort(predicts[i][-1])[::-1][:2]
+            if last_token[0] == 1:
+                last_token = last_token[1]
+            else:
+                last_token = last_token[0]
+            decoder_inputs[index_map[i]].append(last_token)
+            if last_token == end_token or\
+                    (max_len is not None and output_len >= max_len) or\
+                    _get_max_suffix_repeat_times(decoder_inputs, max_repeat * max_repeat_block) >= max_repeat:
+                outputs[index_map[i]] = decoder_inputs[index_map[i]]
+    if is_single:
+        outputs = outputs[0]
+    return outputs
+
+
 def main():
     train(
-        use_checkpoint=True,
-        initial_epoch=336,
+        use_checkpoint=False,
     )
 
 
@@ -207,6 +266,7 @@ class PredictionCallback(keras.callbacks.Callback):
             self.input,
             self.max_len,
         )
+
 
 def _decay(epochs):
     if epochs == 0:
@@ -228,6 +288,23 @@ def _generator():
         else:
             i += 1
         yield [encoder_inputs[i:i+batch_size], decoder_inputs[i:i+batch_size]], decoder_outputs[i:i+batch_size]
+
+
+def _get_max_suffix_repeat_times(tokens, max_len):
+    detect_len = min(max_len, len(tokens))
+    next = [-1] * detect_len
+    k = -1
+    for i in range(1, detect_len):
+        while k >= 0 and tokens[len(tokens) - i - 1] != tokens[len(tokens) - k - 2]:
+            k = next[k]
+        if tokens[len(tokens) - i - 1] == tokens[len(tokens) - k - 2]:
+            k += 1
+        next[i] = k
+    max_repeat = 1
+    for i in range(2, detect_len):
+        if next[i] >= 0 and (i + 1) % (i - next[i]) == 0:
+            max_repeat = max(max_repeat, (i + 1) // (i - next[i]))
+    return max_repeat
 
 
 if __name__ == '__main__':
