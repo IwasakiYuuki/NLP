@@ -308,4 +308,5 @@ def _get_max_suffix_repeat_times(tokens, max_len):
 
 
 if __name__ == '__main__':
+    print(encoder_inputs[0:128].shape)
     main()
