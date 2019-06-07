@@ -105,8 +105,7 @@ def prediction(
 
 def main():
     train(
-        use_checkpoint=True,
-        initial_epoch=812,
+        use_checkpoint=False,
     )
 
 
@@ -140,8 +139,8 @@ def _generator():
     batch_size = 128
     while True:
         yield [generator_data[i * batch_size:(i + 1) * batch_size, 0],
-               generator_data[i * batch_size:(i + 1) * batch_size, 1]], generator_data[
-                                                                        i * batch_size:(i + 1) * batch_size, 2, :, None]
+               generator_data[i * batch_size:(i + 1) * batch_size, 1]], \
+              generator_data[i * batch_size:(i + 1) * batch_size, 2, :, None]
         if ((i + 2) * batch_size) >= data_len:
             i = 0
         else:
