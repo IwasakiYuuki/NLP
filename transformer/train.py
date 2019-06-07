@@ -2,12 +2,13 @@ import pickle
 import numpy as np
 import keras
 import keras_transformer
+import keras_bert
 import sentencepiece as spm
 sp = spm.SentencePieceProcessor()
-sp.Load('/content/gdrive/My Drive/Colab Notebooks/data/trained_model.model')
+sp.Load('./data/trained_model.model')
 
 
-with open('/content/gdrive/My Drive/Colab Notebooks/data/generator_data.pickle', 'rb') as f:
+with open('./data/generator_data.pickle', 'rb') as f:
     generator_data = pickle.load(f)
 
 
@@ -29,11 +30,11 @@ def train(
             embed_weights=np.random.random((8000, 512)),
         )
         transformer_model.load_weights(
-            '/content/gdrive/My Drive/Colab Notebooks/data/checkpoint/transformer_model-Adam4000-Dall.ckpt')
+            './data/checkpoint/transformer_model-Adam4000-Dall.ckpt')
     else:
         transformer_model = keras_transformer.get_model(
             token_num=8000,
-            embed_dim=512,
+            embed_dim=768,
             encoder_num=4,
             decoder_num=4,
             head_num=8,
@@ -51,7 +52,7 @@ def train(
         metrics=[keras.metrics.mae, keras.metrics.sparse_categorical_accuracy],
     )
     transformer_model.summary()
-    tb = keras.callbacks.TensorBoard(log_dir='/content/gdrive/My Drive/Colab Notebooks/data/log-adam-4000-Dall/')
+    tb = keras.callbacks.TensorBoard(log_dir='./data/log-adam-4000-Dall/')
     try:
         history = transformer_model.fit_generator(
             generator=_generator(),
@@ -61,7 +62,7 @@ def train(
             validation_steps=20,
             callbacks=[
                 keras.callbacks.ModelCheckpoint(
-                    '/content/gdrive/My Drive/Colab Notebooks/data/checkpoint/transformer_model-Adam4000-Dall.ckpt',
+                    './data/checkpoint/transformer_model-Adam4000-Dall.ckpt',
                     monitor='val_loss'),
                 tb,
                 keras.callbacks.LearningRateScheduler(_decay),
@@ -105,8 +106,7 @@ def prediction(
 
 def main():
     train(
-        use_checkpoint=True,
-        initial_epoch=812,
+        use_checkpoint=False,
     )
 
 
@@ -140,8 +140,8 @@ def _generator():
     batch_size = 128
     while True:
         yield [generator_data[i * batch_size:(i + 1) * batch_size, 0],
-               generator_data[i * batch_size:(i + 1) * batch_size, 1]], generator_data[
-                                                                        i * batch_size:(i + 1) * batch_size, 2, :, None]
+               generator_data[i * batch_size:(i + 1) * batch_size, 1]], \
+              generator_data[i * batch_size:(i + 1) * batch_size, 2, :, None]
         if ((i + 2) * batch_size) >= data_len:
             i = 0
         else:
