@@ -5,8 +5,10 @@ import keras_transformer
 import keras_bert
 import sentencepiece as spm
 sp = spm.SentencePieceProcessor()
-sp.Load('./data/trained_model.model')
+sp.Load('./data/wiki-ja.model')
 
+config_file_path = './data/config.json'
+checkpoint_file_path = './data/checkpoint/model.ckpt-1400000'
 
 with open('./data/generator_data.pickle', 'rb') as f:
     generator_data = pickle.load(f)
@@ -18,22 +20,7 @@ def train(
 ):
     if use_checkpoint:
         transformer_model = keras_transformer.get_model(
-            token_num=8000,
-            embed_dim=512,
-            encoder_num=4,
-            decoder_num=4,
-            head_num=8,
-            hidden_dim=512,
-            attention_activation='relu',
-            feed_forward_activation='relu',
-            dropout_rate=0.1,
-            embed_weights=np.random.random((8000, 512)),
-        )
-        transformer_model.load_weights(
-            './data/checkpoint/transformer_model-Adam4000-Dall.ckpt')
-    else:
-        transformer_model = keras_transformer.get_model(
-            token_num=8000,
+            token_num=32000,
             embed_dim=768,
             encoder_num=4,
             decoder_num=4,
@@ -42,7 +29,25 @@ def train(
             attention_activation='relu',
             feed_forward_activation='relu',
             dropout_rate=0.1,
-            embed_weights=np.random.random((8000, 512)),
+        )
+        transformer_model.load_weights('./data/checkpoint/transformer_onbert_model-Adam4000-Dall.ckpt')
+    else:
+        bert_model = keras_bert.load_trained_model_from_checkpoint(
+            checkpoint_file=checkpoint_file_path,
+            config_file=config_file_path
+        )
+        bert_weights = bert_model.get_layer(name='Embedding-Token').get_weights()[0]
+        transformer_model = keras_transformer.get_model(
+            token_num=32000,
+            embed_dim=768,
+            encoder_num=4,
+            decoder_num=4,
+            head_num=8,
+            hidden_dim=512,
+            attention_activation='relu',
+            feed_forward_activation='relu',
+            dropout_rate=0.1,
+            embed_weights=bert_weights,
         )
     transformer_model.compile(
         optimizer=keras.optimizers.Adam(beta_2=0.98),
@@ -52,7 +57,7 @@ def train(
         metrics=[keras.metrics.mae, keras.metrics.sparse_categorical_accuracy],
     )
     transformer_model.summary()
-    tb = keras.callbacks.TensorBoard(log_dir='./data/log-adam-4000-Dall/')
+    tb = keras.callbacks.TensorBoard(log_dir='./data/log-adam-4000-Dall-onbert/')
     try:
         history = transformer_model.fit_generator(
             generator=_generator(),
@@ -62,11 +67,10 @@ def train(
             validation_steps=20,
             callbacks=[
                 keras.callbacks.ModelCheckpoint(
-                    './data/checkpoint/transformer_model-Adam4000-Dall.ckpt',
+                    './data/checkpoint/transformer_onbert_model-Adam4000-Dall.ckpt',
                     monitor='val_loss'),
                 tb,
                 keras.callbacks.LearningRateScheduler(_decay),
-                #            keras.callbacks.EarlyStopping(monitor='val_loss', patience=0, verbose=1, mode='auto'),
                 PredictionCallback(generator_data[:2, 0], 30),
             ],
             initial_epoch=initial_epoch,
@@ -80,9 +84,6 @@ def prediction(
         inputs,
         max_len,
 ):
-    #    predicted = np.asarray([2]+[0]*(max_len-1))
-    #    for i in range(max_len-1):
-    #        predicted[i+1] = model.predict(x=[inputs, predicted]).argmax(axis=2).flatten()[i+1]
     predicted = keras_transformer.decode(
         model,
         inputs.tolist(),
